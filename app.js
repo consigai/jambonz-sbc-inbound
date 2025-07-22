@@ -172,6 +172,16 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
           srf.locals.addToRedis = () => addToSet(setName, hostport);
           srf.locals.removeFromRedis = () => removeFromSet(setName, hostport);
           srf.locals.addToRedis();
+
+
+          // Periodic re-registration to ensure SBC stays in active set
+          const reRegisterInterval = parseInt(process.env.SBC_RE_REGISTER_INTERVAL_MS) || 30000;
+          logger.info(`setting up SBC re-registration every ${reRegisterInterval}ms for ${hostport}`);
+          srf.locals.reRegisterTimer = setInterval(() => {
+            logger.debug(`re-registering SBC address in redis: ${hostport}`);
+            srf.locals.addToRedis();
+          }, reRegisterInterval);
+
           addedPrivateIp = true;
         }
       }
@@ -190,7 +200,14 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
         srf.locals.addToRedis = () => addToSet(setName, hostport);
         srf.locals.removeFromRedis = () => removeFromSet(setName, hostport);
         srf.locals.addToRedis();
-      }
+
+          // Periodic re-registration to ensure SBC stays in active set
+          const reRegisterInterval = parseInt(process.env.SBC_RE_REGISTER_INTERVAL_MS) || 30000;
+          logger.info(`setting up SBC re-registration every ${reRegisterInterval}ms for ${hostport}`);
+          srf.locals.reRegisterTimer = setInterval(() => {
+            logger.debug(`re-registering SBC address in redis: ${hostport}`);
+            srf.locals.addToRedis();
+          }, reRegisterInterval);      }
     }
     srf.locals.sbcPublicIpAddress = parseHostPorts(logger, hostports, srf);
   });
@@ -371,6 +388,12 @@ process.on('SIGTERM', handle.bind(null, removeFromSet, setName));
 
 function handle(removeFromSet, setName, signal) {
   logger.info(`got signal ${signal}`);
+
+  // Clear re-registration timer on shutdown
+  if (srf.locals.reRegisterTimer) {
+    clearInterval(srf.locals.reRegisterTimer);
+    logger.info('cleared SBC re-registration timer');
+  }
   if (srf.locals.privateSipAddress && setName) {
     logger.info(`removing ${srf.locals.privateSipAddress} from set ${setName}`);
     removeFromSet(setName, srf.locals.privateSipAddress);
