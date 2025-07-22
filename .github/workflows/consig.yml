@@ -6,7 +6,7 @@ on:
 
 jobs:
   call-workflow-passing-data:
-    uses: consigai/jambonz-sbc-inbound/.github/workflows/cdk-deploy.yml@consig-cdk
+    uses: consigai/jambonz-sbc-inbound/.github/workflows/cdk-deploy.yml@consig-0.9.4-1-SBC
     permissions:
       actions: write
       contents: read
