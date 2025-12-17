@@ -72,6 +72,9 @@ values ('d458bf7a-bcea-47b2-ac96-66dfc9c5c220', '150822233*', '287c1452-620d-419
 insert into phone_numbers (phone_number_sid, number, voip_carrier_sid, account_sid)
 values ('f7ad205d-b92f-4363-8160-f8b5216b40d3', '15083871234', '287c1452-620d-4195-9f19-c9814ef90d78', 'd7cc37cb-d152-49ef-a51b-485f6e917089');
 
+insert into phone_numbers (phone_number_sid, number, voip_carrier_sid, account_sid, application_sid)
+values ('c17d5a7d-9328-4663-92c0-f65aa8381264', '12125551212', '287c1452-620d-4195-9f19-c9814ef90d78', 'ed649e33-e771-403a-8c99-1780eabbc803', '3b43e39f-4346-4218-8434-a53130e8be49');
+
 -- two accounts that both have the same carrier with default routing (ambiguity test)
 insert into accounts (account_sid, name, service_provider_sid, webhook_secret, sip_realm)
 values ('239d7d49-b3e4-4fdb-9d66-661149f717e8', 'Account B1', '3f35518f-5a0d-4c2e-90a5-2407bb3b36f0', 'foobar', 'echo2.sip.jambonz.org');
@@ -92,3 +95,48 @@ insert into sip_gateways (sip_gateway_sid, voip_carrier_sid, ipv4, inbound, outb
 values ('664a5339-c62c-4075-9e19-f4de70a96597', '731abdc7-0220-4964-bc66-32b5c70cd9ab', '172.38.0.40', true, false);
 insert into sip_gateways (sip_gateway_sid, voip_carrier_sid, ipv4, inbound, outbound) 
 values ('554a5339-c62c-4075-9e19-f4de70a96597', '987abdc7-0220-4964-bc66-32b5c70cd9ab', '172.38.0.40', true, false);
+
+-- voip carrier belonging to all accounts
+insert into voip_carriers (voip_carrier_sid, name, service_provider_sid) 
+values ('voip100', 'test-voip-carrier', '3f35518f-5a0d-4c2e-90a5-2407bb3b36f0');
+insert into sip_gateways (sip_gateway_sid, voip_carrier_sid, ipv4, inbound, outbound) 
+values ('sip100', 'voip100', '172.38.0.50', true, false);
+
+insert into voip_carriers (voip_carrier_sid, name, service_provider_sid) 
+values ('voip101', 'test-voip-carrier-101', '3f35518f-5a0d-4c2e-90a5-2407bb3b36f0');
+insert into sip_gateways (sip_gateway_sid, voip_carrier_sid, ipv4, inbound, outbound) 
+values ('sip101', 'voip101', '172.38.0.50', true, false);
+insert into sip_gateways (sip_gateway_sid, voip_carrier_sid, ipv4, inbound, outbound) 
+values ('sip102', 'voip101', '172.38.0.51', true, false);
+
+insert into applications (application_sid, name, account_sid, call_hook_sid, call_status_hook_sid)
+values ('app100', 'app100', 'ee9d7d49-b3e4-4fdb-9d66-661149f717e8', '90dda62e-0ea2-47d1-8164-5bd49003476c', '90dda62e-0ea2-47d1-8164-5bd49003476c');
+insert into applications (application_sid, name, account_sid, call_hook_sid, call_status_hook_sid)
+values ('app101', 'app101', 'ee9d7d49-b3e4-4fdb-9d66-661149f717e8', '90dda62e-0ea2-47d1-8164-5bd49003476c', '90dda62e-0ea2-47d1-8164-5bd49003476c');
+insert into phone_numbers (phone_number_sid, number, voip_carrier_sid, account_sid, application_sid)
+values ('phone100', '^100', 'voip101', 'ee9d7d49-b3e4-4fdb-9d66-661149f717e8', 'app100');
+insert into phone_numbers (phone_number_sid, number, voip_carrier_sid, account_sid, application_sid)
+values ('phone101', '^10012', 'voip100', 'ee9d7d49-b3e4-4fdb-9d66-661149f717e8', 'app101');
+-- insert an invalid regex pattern, the below pattern should be ignored during pattern
+insert into phone_numbers (phone_number_sid, number, voip_carrier_sid, account_sid, application_sid)
+values ('phone102', '\\dkjfhmdf\\', 'voip100', 'ee9d7d49-b3e4-4fdb-9d66-661149f717e8', 'app101');
+
+-- account with a sip realm that is not associated with any voip carriers
+insert into accounts (account_sid, name, service_provider_sid, webhook_secret, sip_realm)
+values ('acct-100', 'Account 100', '3f35518f-5a0d-4c2e-90a5-2407bb3b36f0', 'foobar', 'ram.sip.jambonz.org');
+
+-- registration trunk carrier for ephemeral gateway testing
+insert into voip_carriers (voip_carrier_sid, name, account_sid, service_provider_sid, trunk_type,
+    requires_register, register_username, register_sip_realm, register_password, is_active)
+values ('4a7d1c8e-5f2b-4d9a-8e3c-6b5a9f1e4c7d', 'test-registration-trunk', 'ed649e33-e771-403a-8c99-1780eabbc803',
+    '3f35518f-5a0d-4c2e-90a5-2407bb3b36f0', 'registration', true, 'testuser',
+    'sip.carrier.example.com', 'testpass', true);
+
+-- sip_gateway for outbound only (inbound will use ephemeral gateway from Redis)
+insert into sip_gateways (sip_gateway_sid, voip_carrier_sid, ipv4, inbound, outbound)
+values ('8b3e5f9a-2c1d-4e7b-9a6c-3d8f1e5a7b2c', '4a7d1c8e-5f2b-4d9a-8e3c-6b5a9f1e4c7d', '3.3.3.3', false, true);
+
+-- phone number for ephemeral gateway test
+insert into phone_numbers (phone_number_sid, number, voip_carrier_sid, account_sid, application_sid)
+values ('7c2d4e6f-8a1b-4c9d-7e5f-2a8b3c6d9e1f', '16175551000', '4a7d1c8e-5f2b-4d9a-8e3c-6b5a9f1e4c7d', 'ed649e33-e771-403a-8c99-1780eabbc803',
+    '3b43e39f-4346-4218-8434-a53130e8be49');

@@ -75,7 +75,10 @@ const {
   addToSet,
   removeFromSet,
   incrKey,
-  decrKey} = require('@jambonz/realtimedb-helpers')({}, logger);
+  decrKey,
+  createEphemeralGateway,
+  queryEphemeralGateways
+} = require('@jambonz/realtimedb-helpers')({}, logger);
 
 const ngProtocol = process.env.JAMBONES_NG_PROTOCOL || 'udp';
 const ngPort = process.env.RTPENGINE_PORT || ('udp' === ngProtocol ? 22222 : 8080);
@@ -117,7 +120,9 @@ srf.locals = {...srf.locals,
     createSet,
     incrKey,
     decrKey,
-    retrieveSet
+    retrieveSet,
+    createEphemeralGateway,
+    queryEphemeralGateways
   }
 };
 const {
@@ -125,7 +130,8 @@ const {
   wasOriginatedFromCarrier,
   getApplicationForDidAndCarrier,
   getOutboundGatewayForRefer,
-  getApplicationBySid
+  getApplicationBySid,
+  lookupAuthCarriersForAccountAndSP
 } = require('./lib/db-utils')(srf, logger);
 srf.locals = {
   ...srf.locals,
@@ -134,7 +140,8 @@ srf.locals = {
   getApplicationForDidAndCarrier,
   getOutboundGatewayForRefer,
   getFeatureServer: require('./lib/fs-tracking')(srf, logger),
-  getApplicationBySid
+  getApplicationBySid,
+  lookupAuthCarriersForAccountAndSP
 };
 const activeCallIds = srf.locals.activeCallIds;
 
@@ -143,7 +150,8 @@ const {
   handleSipRec,
   identifyAccount,
   checkLimits,
-  challengeDeviceCalls
+  challengeDeviceCalls,
+  identifyAuthTrunk
 } = require('./lib/middleware')(srf, logger);
 const CallSession = require('./lib/call-session');
 
@@ -248,7 +256,9 @@ srf.use('invite', [
   handleSipRec,
   identifyAccount,
   checkLimits,
-  challengeDeviceCalls
+  challengeDeviceCalls,
+  // challengeDeviceCalls will detect auth_trunk or device calls, identifyAuthTrunk have to be after that
+  identifyAuthTrunk
 ]);
 
 srf.invite((req, res) => {
