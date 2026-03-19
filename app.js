@@ -175,20 +175,24 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
         const arr = /^(.*)\/(.*):(\d+)$/.exec(hp);
         if (arr && 'tcp' === arr[1] && matcher.contains(arr[2])) {
           const hostport = `${arr[2]}:${arr[3]}`;
-          logger.info(`adding sbc private address to redis: ${hostport}`);
           srf.locals.privateSipAddress = hostport;
-          srf.locals.addToRedis = () => addToSet(setName, hostport);
-          srf.locals.removeFromRedis = () => removeFromSet(setName, hostport);
-          srf.locals.addToRedis();
 
-
-          // Periodic re-registration to ensure SBC stays in active set
-          const reRegisterInterval = parseInt(process.env.SBC_RE_REGISTER_INTERVAL_MS) || 30000;
-          logger.info(`setting up SBC re-registration every ${reRegisterInterval}ms for ${hostport}`);
-          srf.locals.reRegisterTimer = setInterval(() => {
-            logger.debug(`re-registering SBC address in redis: ${hostport}`);
+          if (!process.env.SBC_SKIP_DISCOVERY_REGISTRATION) {
+            logger.info(`adding sbc private address to redis: ${hostport}`);
+            srf.locals.addToRedis = () => addToSet(setName, hostport);
+            srf.locals.removeFromRedis = () => removeFromSet(setName, hostport);
             srf.locals.addToRedis();
-          }, reRegisterInterval);
+
+            // Periodic re-registration to ensure SBC stays in active set
+            const reRegisterInterval = parseInt(process.env.SBC_RE_REGISTER_INTERVAL_MS) || 30000;
+            logger.info(`setting up SBC re-registration every ${reRegisterInterval}ms for ${hostport}`);
+            srf.locals.reRegisterTimer = setInterval(() => {
+              logger.debug(`re-registering SBC address in redis: ${hostport}`);
+              srf.locals.addToRedis();
+            }, reRegisterInterval);
+          } else {
+            logger.info(`SBC_SKIP_DISCOVERY_REGISTRATION set - skipping redis registration for ${hostport}`);
+          }
 
           addedPrivateIp = true;
         }
@@ -203,11 +207,13 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
       }
       else if (!addedPrivateIp && arr && 'tcp' === arr[1] && matcher.contains(arr[2])) {
         const hostport = `${arr[2]}:${arr[3]}`;
-        logger.info(`adding sbc private address to redis: ${hostport}`);
         srf.locals.privateSipAddress = hostport;
-        srf.locals.addToRedis = () => addToSet(setName, hostport);
-        srf.locals.removeFromRedis = () => removeFromSet(setName, hostport);
-        srf.locals.addToRedis();
+
+        if (!process.env.SBC_SKIP_DISCOVERY_REGISTRATION) {
+          logger.info(`adding sbc private address to redis: ${hostport}`);
+          srf.locals.addToRedis = () => addToSet(setName, hostport);
+          srf.locals.removeFromRedis = () => removeFromSet(setName, hostport);
+          srf.locals.addToRedis();
 
           // Periodic re-registration to ensure SBC stays in active set
           const reRegisterInterval = parseInt(process.env.SBC_RE_REGISTER_INTERVAL_MS) || 30000;
@@ -215,7 +221,11 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
           srf.locals.reRegisterTimer = setInterval(() => {
             logger.debug(`re-registering SBC address in redis: ${hostport}`);
             srf.locals.addToRedis();
-          }, reRegisterInterval);      }
+          }, reRegisterInterval);
+        } else {
+          logger.info(`SBC_SKIP_DISCOVERY_REGISTRATION set - skipping redis registration for ${hostport}`);
+        }
+      }
     }
     srf.locals.sbcPublicIpAddress = parseHostPorts(logger, hostports, srf);
   });
@@ -399,14 +409,16 @@ process.on('SIGTERM', handle.bind(null, removeFromSet, setName));
 function handle(removeFromSet, setName, signal) {
   logger.info(`got signal ${signal}`);
 
-  // Clear re-registration timer on shutdown
-  if (srf.locals.reRegisterTimer) {
-    clearInterval(srf.locals.reRegisterTimer);
-    logger.info('cleared SBC re-registration timer');
-  }
-  if (srf.locals.privateSipAddress && setName) {
-    logger.info(`removing ${srf.locals.privateSipAddress} from set ${setName}`);
-    removeFromSet(setName, srf.locals.privateSipAddress);
+  if (!process.env.SBC_SKIP_DISCOVERY_REGISTRATION) {
+    // Clear re-registration timer on shutdown
+    if (srf.locals.reRegisterTimer) {
+      clearInterval(srf.locals.reRegisterTimer);
+      logger.info('cleared SBC re-registration timer');
+    }
+    if (srf.locals.privateSipAddress && setName) {
+      logger.info(`removing ${srf.locals.privateSipAddress} from set ${setName}`);
+      removeFromSet(setName, srf.locals.privateSipAddress);
+    }
   }
   if (process.env.K8S) {
     lifecycleEmitter.operationalState = LifeCycleEvents.ScaleIn;
