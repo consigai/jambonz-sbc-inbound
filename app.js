@@ -177,7 +177,15 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
           const hostport = `${arr[2]}:${arr[3]}`;
           srf.locals.privateSipAddress = hostport;
 
-          if (!process.env.SBC_SKIP_DISCOVERY_REGISTRATION) {
+          // [consig] SBC_SKIP_DISCOVERY_REGISTRATION: set this on the inbound SBC when running
+          // a split inbound/outbound deployment where a dedicated sbc-outbound pool handles
+          // all outbound routing. In that topology only the outbound SBC should appear in the
+          // feature server's default:active-sip roster — if the inbound SBC also registers here
+          // the feature server will round-robin outbound calls across both pools, and calls
+          // routed to the inbound-only pool will fail. Leave unset (default) for combined mode.
+          if (process.env.SBC_SKIP_DISCOVERY_REGISTRATION) {
+            logger.info(`[consig] SBC_SKIP_DISCOVERY_REGISTRATION set - skipping redis registration for ${hostport}`);
+          } else {
             logger.info(`adding sbc private address to redis: ${hostport}`);
             srf.locals.addToRedis = () => addToSet(setName, hostport);
             srf.locals.removeFromRedis = () => removeFromSet(setName, hostport);
@@ -190,8 +198,6 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
               logger.debug(`re-registering SBC address in redis: ${hostport}`);
               srf.locals.addToRedis();
             }, reRegisterInterval);
-          } else {
-            logger.info(`SBC_SKIP_DISCOVERY_REGISTRATION set - skipping redis registration for ${hostport}`);
           }
 
           addedPrivateIp = true;
@@ -209,7 +215,10 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
         const hostport = `${arr[2]}:${arr[3]}`;
         srf.locals.privateSipAddress = hostport;
 
-        if (!process.env.SBC_SKIP_DISCOVERY_REGISTRATION) {
+        // [consig] see SBC_SKIP_DISCOVERY_REGISTRATION note above
+        if (process.env.SBC_SKIP_DISCOVERY_REGISTRATION) {
+          logger.info(`[consig] SBC_SKIP_DISCOVERY_REGISTRATION set - skipping redis registration for ${hostport}`);
+        } else {
           logger.info(`adding sbc private address to redis: ${hostport}`);
           srf.locals.addToRedis = () => addToSet(setName, hostport);
           srf.locals.removeFromRedis = () => removeFromSet(setName, hostport);
@@ -222,8 +231,6 @@ if (process.env.DRACHTIO_HOST && !process.env.K8S) {
             logger.debug(`re-registering SBC address in redis: ${hostport}`);
             srf.locals.addToRedis();
           }, reRegisterInterval);
-        } else {
-          logger.info(`SBC_SKIP_DISCOVERY_REGISTRATION set - skipping redis registration for ${hostport}`);
         }
       }
     }
@@ -409,6 +416,7 @@ process.on('SIGTERM', handle.bind(null, removeFromSet, setName));
 function handle(removeFromSet, setName, signal) {
   logger.info(`got signal ${signal}`);
 
+  // [consig] only clean up Redis registration if we registered (see SBC_SKIP_DISCOVERY_REGISTRATION)
   if (!process.env.SBC_SKIP_DISCOVERY_REGISTRATION) {
     // Clear re-registration timer on shutdown
     if (srf.locals.reRegisterTimer) {
