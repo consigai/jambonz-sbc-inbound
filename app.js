@@ -20,6 +20,12 @@ const opts = Object.assign({
   timestamp: () => {return `, "time": "${new Date().toISOString()}"`;}
 }, {level: process.env.JAMBONES_LOGLEVEL || 'info'});
 const logger = require('pino')(opts);
+
+/* consigai/outbound#795: defense in depth only. A stray rejection from a best-effort path
+ (metrics, CDRs, db polling) must not exit an SBC carrying live calls. Fix the source too. */
+process.on('unhandledRejection', (reason) => {
+  logger.error({err: reason}, 'unhandledRejection: logged and ignored, process kept alive');
+});
 const {
   writeCallCount,
   writeCallCountSP,
@@ -28,7 +34,7 @@ const {
   writeCdrs,
   writeAlerts,
   AlertType
-} = require('@jambonz/time-series')(logger, {
+} = require('./lib/time-series')(logger, {
   host: process.env.JAMBONES_TIME_SERIES_HOST,
   port: process.env.JAMBONES_TIME_SERIES_PORT || 8086,
   commitSize: 50,
@@ -331,7 +337,12 @@ if ('test' !== process.env.NODE_ENV) {
     stats.gauge('sbc.sip.calls.count', activeCallIds.size,
       ['direction:inbound', `instance_id:${process.env.INSTANCE_ID || 0}`]);
 
-    const r = await lookupSystemInformation();
+    let r;
+    try {
+      r = await lookupSystemInformation();
+    } catch (err) {
+      logger.warn({err}, 'Error looking up system information');
+    }
     if (r) {
       if (r.private_network_cidr !== srf.locals.privateNetworkCidr) {
         logger.info(`updating private network cidr from ${srf.locals.privateNetworkCidr} to ${r.private_network_cidr}`);
