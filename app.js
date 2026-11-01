@@ -85,6 +85,8 @@ const {
   createEphemeralGateway,
   queryEphemeralGateways
 } = require('@jambonz/realtimedb-helpers')({}, logger);
+/* consigai/consig-cdk-jam#155: reconnect to the new primary after a Valkey failover */
+require('./lib/redis-failover').followFailover(redisClient, logger);
 
 const ngProtocol = process.env.JAMBONES_NG_PROTOCOL || 'udp';
 const ngPort = process.env.RTPENGINE_PORT || ('udp' === ngProtocol ? 22222 : 8080);
